@@ -369,7 +369,8 @@ async function completeSimpleWithProvider(
   return provider.streamSimple(model, context, options).result();
 }
 
-const DETAILED_CLASSIFIER_MAX_TOKENS = 1200;
+// Reasoning shares this budget with the decision tool call (#39, #42).
+const DETAILED_CLASSIFIER_MAX_TOKENS = 4096;
 // Match Pi AI's context clamp safety reserve and input estimate.
 const CLASSIFIER_CONTEXT_MARGIN_TOKENS = 4096;
 const CLASSIFIER_CHARS_PER_TOKEN = 4;

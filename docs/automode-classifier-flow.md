@@ -342,7 +342,7 @@ Pi AI clamps the request to the nearest supported level. Models without reasonin
 
 Reasoning does not increase the stage token limits. A high level can use all stage tokens before it produces valid visible output. Truncation fails closed.
 
-The fast-stage limit is 512 tokens. The detailed-stage limit is 1200 tokens. `low` matches the reasoning effort of Codex Auto Review.
+The fast-stage limit is 512 tokens. The detailed-stage limit is 4096 tokens. `low` matches the reasoning effort of Codex Auto Review.
 
 The extension asks Pi's model registry for API credentials. If the model cannot be found or credentials are unavailable, it tries the next configured fallback. If no fallback remains, classification returns a blocking decision:
 
@@ -360,7 +360,7 @@ If a request exceeds its budget, pi-automode aborts it and tries the next config
 
 The fast stage requires one visible digit and uses `maxTokens: 512`. Reasoning models can use hidden tokens before they emit the digit.
 
-Extra visible content fails fast-stage parsing. Detailed review uses `maxTokens: 1200`. It can retry once after a missing, invalid, or truncated decision tool call.
+Extra visible content fails fast-stage parsing. Detailed review uses `maxTokens: 4096`. It can retry once after a missing, invalid, or truncated decision tool call, or after a transient provider error.
 
 ## Parsing the classifier result
 
