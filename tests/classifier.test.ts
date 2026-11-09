@@ -1321,6 +1321,57 @@ test("classifyWithRetry surfaces provider-reported errors without retrying", asy
 	assert.equal(attempts[0]?.response?.errorMessage, "Unsupported parameter: temperature");
 });
 
+const TRANSIENT_PROVIDER_ERROR =
+	"Claude Code upstream stream ended before message_stop (status 200, capture incomplete)";
+
+test("classifyWithRetry retries once after a transient provider error response", async () => {
+	const response = { ...assistantWith("", "error"), errorMessage: TRANSIENT_PROVIDER_ERROR };
+	const { fn, calls } = fakeComplete([response, assistantWithDecision()]);
+	const decision = await classifyWithRetry(
+		fn,
+		classifierWithContext(),
+		{ systemPrompt: "s", messages: [] },
+		undefined,
+	);
+
+	assert.equal(decision.decision, "allow");
+	assert.equal(calls.length, 2);
+});
+
+test("classifyWithRetry retries once when complete throws a transient provider error", async () => {
+	let calls = 0;
+	const fn = async () => {
+		calls += 1;
+		if (calls === 1) throw new Error(TRANSIENT_PROVIDER_ERROR);
+		return assistantWithDecision();
+	};
+	const decision = await classifyWithRetry(
+		fn as never,
+		classifierWithContext(),
+		{ systemPrompt: "s", messages: [] },
+		undefined,
+	);
+
+	assert.equal(decision.decision, "allow");
+	assert.equal(calls, 2);
+});
+
+test("classifyWithRetry fails closed when the transient provider error repeats", async () => {
+	const response = { ...assistantWith("", "error"), errorMessage: TRANSIENT_PROVIDER_ERROR };
+	const { fn, calls } = fakeComplete([response, response]);
+	const decision = await classifyWithRetry(
+		fn,
+		classifierWithContext(),
+		{ systemPrompt: "s", messages: [] },
+		undefined,
+	);
+
+	assert.equal(decision.decision, "block");
+	assert.match(decision.reason, /stream ended before message_stop/);
+	assert.equal(decision.failure, "infrastructure");
+	assert.equal(calls.length, 2);
+});
+
 test("classifyWithRetry fails closed on an empty provider error with a valid decision tool call", async () => {
 	const response = {
 		...assistantWithDecision(VALID_ALLOW, { stopReason: "error" }),
@@ -1412,4 +1463,22 @@ test("classifyWithRetry reports a thrown attempt via onAttempt and fails closed"
 	assert.equal(attempts.length, 1);
 	assert.match(attempts[0]?.error ?? "", /network down/);
 	assert.equal(attempts[0]?.response, undefined);
+});
+
+test("classifyWithRetry reports a thrown transient error that repeats as an infrastructure failure", async () => {
+	let calls = 0;
+	const fn = async () => {
+		calls += 1;
+		throw new Error(TRANSIENT_PROVIDER_ERROR);
+	};
+	const decision = await classifyWithRetry(
+		fn as never,
+		classifierWithContext(),
+		{ systemPrompt: "s", messages: [] },
+		undefined,
+	);
+
+	assert.equal(decision.decision, "block");
+	assert.equal(decision.failure, "infrastructure");
+	assert.equal(calls, 2);
 });

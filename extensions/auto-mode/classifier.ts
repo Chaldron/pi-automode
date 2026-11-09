@@ -651,6 +651,14 @@ function classifierFailure(
   };
 }
 
+/** Provider errors worded as transient transport failures get one more attempt. */
+const TRANSIENT_CLASSIFIER_ERROR =
+  /stream ended before message_stop|connection lost before a response|upstream server error/i;
+
+function isTransientClassifierError(message: string | undefined): boolean {
+  return message !== undefined && TRANSIENT_CLASSIFIER_ERROR.test(message);
+}
+
 /**
  * Call the detailed classifier and parse its decision tool call. Invalid or
  * truncated output is retried. Provider errors and exhausted retries fail closed.
@@ -706,10 +714,19 @@ export async function classifyWithRetry(
         error: message,
         durationMs: Date.now() - started,
       });
+      const reason = `Classifier failed; auto mode fails closed: ${message}`;
+      if (
+        isTransientClassifierError(message) &&
+        attempt + 1 < maxAttempts &&
+        !signal?.aborted
+      ) {
+        lastReason = reason;
+        continue;
+      }
       return {
         decision: "block",
         tier: "none",
-        reason: `Classifier failed; auto mode fails closed: ${message}`,
+        reason,
         failure: "infrastructure",
       };
     }
@@ -722,7 +739,17 @@ export async function classifyWithRetry(
       responseAttempt(stage, attempt + 1, response, durationMs, decision, false),
     );
     if (signal?.aborted) return CANCELLED;
-    if (failure) return failure;
+    if (failure) {
+      if (
+        response.stopReason === "error" &&
+        isTransientClassifierError(response.errorMessage) &&
+        attempt + 1 < maxAttempts
+      ) {
+        lastReason = failure.reason;
+        continue;
+      }
+      return failure;
+    }
     if (decision) return decision;
     lastReason =
       response.stopReason === "length"
