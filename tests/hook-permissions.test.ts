@@ -241,27 +241,33 @@ test("tool_call records cancelled actions without Bash analysis or classificatio
 
 test("before_agent_start adds blocked-action guidance when auto mode is enabled", async () => {
 	const harness = await setupHookTest();
+	const sections: Record<string, string> = { other_extension: "kept" };
 	const result = await harness.emit("before_agent_start", {
 		systemPrompt: "base prompt",
-		systemPromptOptions: { contextFiles: [] },
-	}, harness.ctx) as { systemPrompt?: string };
+		systemPromptOptions: { contextFiles: [], sections },
+	}, harness.ctx);
+	const guidance = sections.auto_mode ?? "";
 
-	assert.match(result.systemPrompt ?? "", /pi-automode blocks a tool call/i);
-	assert.match(result.systemPrompt ?? "", /treat the action as not executed/i);
-	assert.match(result.systemPrompt ?? "", /do not claim success/i);
-	assert.match(result.systemPrompt ?? "", /equivalent workaround/i);
-	assert.match(result.systemPrompt ?? "", /report the block.*before continuing with dependent work/i);
-	assert.match(result.systemPrompt ?? "", /independent work can continue/i);
+	assert.equal(result, undefined);
+	assert.equal(sections.other_extension, "kept");
+	assert.match(guidance, /pi-automode blocks a tool call/i);
+	assert.match(guidance, /treat the action as not executed/i);
+	assert.match(guidance, /do not claim success/i);
+	assert.match(guidance, /equivalent workaround/i);
+	assert.match(guidance, /report the block.*before continuing with dependent work/i);
+	assert.match(guidance, /independent work can continue/i);
 });
 
 test("before_agent_start omits blocked-action guidance when auto mode is disabled", async () => {
 	const harness = await setupHookTest({ config: baseConfig({ enabled: false }) });
+	const sections: Record<string, string> = {};
 	const result = await harness.emit("before_agent_start", {
 		systemPrompt: "base prompt",
-		systemPromptOptions: { contextFiles: [] },
+		systemPromptOptions: { contextFiles: [], sections },
 	}, harness.ctx);
 
 	assert.equal(result, undefined);
+	assert.equal(sections.auto_mode, undefined);
 });
 
 test("tool patterns for MCP and extension tools match by bare tool name only", () => {

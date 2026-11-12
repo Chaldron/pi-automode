@@ -442,7 +442,8 @@ export function createPiAutomode(options: PiAutomodeOptions = {}) {
       loadedContext = loadedContextFromSystemPromptOptions(
         event.systemPromptOptions,
       );
-      return { systemPrompt: `${event.systemPrompt}\n\n${AUTO_MODE_GUIDANCE}` };
+      event.systemPromptOptions.sections.auto_mode = AUTO_MODE_GUIDANCE;
+      return undefined;
     });
 
     pi.on("tool_call", async (event, ctx) => {
