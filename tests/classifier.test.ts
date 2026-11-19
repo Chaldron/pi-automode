@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import {
+	registerSessionResourceCleanup,
+	type AssistantMessage,
+} from "@earendil-works/pi-ai";
 import {
 	CLASSIFIER_DECISION_TOOL,
 	CLASSIFIER_DETAILED_INSTRUCTION,
@@ -553,6 +556,24 @@ test("classifier cache session ids are stable, classifier-specific, and scoped t
 	assert.equal(first, same);
 	assert.notEqual(first, other);
 	assert.match(first, /^pi-automode-[a-f0-9]{32}$/);
+});
+
+test("session shutdown releases resources held under the classifier cache session id", async () => {
+	const cleaned: Array<string | undefined> = [];
+	const unregister = registerSessionResourceCleanup((sessionId) => {
+		cleaned.push(sessionId);
+	});
+	try {
+		const fake = createFakePi();
+		const ctx = createFakeCtx(fake.entries);
+		createPiAutomode({ loadConfig: () => baseConfig() })(fake.pi);
+		await fake.emit("session_start", { type: "session_start" }, ctx);
+		await fake.emit("session_shutdown", { type: "session_shutdown", reason: "quit" }, ctx);
+
+		assert.deepEqual(cleaned, [classifierCacheSessionId(ctx as never)]);
+	} finally {
+		unregister();
+	}
 });
 
 test("classifier action serialization preserves long input independently of transcript truncation", () => {

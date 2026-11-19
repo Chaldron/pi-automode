@@ -6,9 +6,10 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { StringEnum } from "@earendil-works/pi-ai";
+import { cleanupSessionResources, StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import {
+  classifierCacheSessionId,
   classifierReasoningForConfig,
   defaultClassifyAction,
   serializeClassifierAction,
@@ -434,6 +435,14 @@ export function createPiAutomode(options: PiAutomodeOptions = {}) {
         globalConfigNoticeShown = true;
       }
       updateUi(ctx);
+    });
+
+    // The classifier sends its own session ID, which Pi's session cleanup does
+    // not cover. A provider that keeps a resource per session ID (a warm
+    // Claude Code process, a socket) would otherwise hold it after shutdown
+    // and keep `pi -p` from exiting.
+    pi.on("session_shutdown", (_event, ctx) => {
+      cleanupSessionResources(classifierCacheSessionId(ctx));
     });
 
     pi.on("before_agent_start", (event) => {
