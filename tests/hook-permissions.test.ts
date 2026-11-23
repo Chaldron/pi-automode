@@ -51,6 +51,31 @@ test("tool_call hook fails closed for malformed permission denies", async () => 
 	assert.equal(harness.classifierCalls, 0);
 });
 
+test("a Bash command that does not parse is blocked, and the reason says so", async () => {
+	const pattern = parseToolPattern("bash(git push --force*)");
+	assert.ok(pattern);
+	const harness = await setupHookTest({
+		config: baseConfig({ permissionDeny: [pattern] }),
+	});
+
+	const result = await harness.emit("tool_call", {
+		toolName: "bash",
+		input: { command: 'cat notes.txt; echo "unterminated' },
+	}, harness.ctx) as { block?: boolean; reason?: string };
+
+	assert.equal(result.block, true);
+	assert.match(result.reason ?? "", /Blocked by permissions\.deny: the command could not be parsed as shell \(.*quote.*\), so it cannot be checked/);
+	assert.match(result.reason ?? "", /It did not match bash\(git push --force\*\)\./);
+	assert.equal(harness.classifierCalls, 0);
+
+	const parsed = await harness.emit("tool_call", {
+		toolName: "bash",
+		input: { command: "git push --force origin main" },
+	}, harness.ctx) as { reason?: string };
+	assert.doesNotMatch(parsed.reason ?? "", /could not be parsed/);
+	assert.match(parsed.reason ?? "", /Blocked by permissions\.deny: bash\(git push --force\*\); matched command: git push --force origin main/);
+});
+
 test("tool_call path denies resolve symlinks and file URLs", async () => {
 	const base = mkdtempSync(join(os.tmpdir(), "pi-automode-permission-hook-"));
 	try {

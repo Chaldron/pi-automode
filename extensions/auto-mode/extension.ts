@@ -44,6 +44,7 @@ import { promptForClassifierModel } from "./model-selector.ts";
 import {
   matchesAllowedToolPatterns,
   matchesDeniedPath,
+  isMalformedToolPattern,
   matchesToolPattern,
   matchingBashCommandText,
   recursiveSearchMayReachDeniedPath,
@@ -535,13 +536,19 @@ export function createPiAutomode(options: PiAutomodeOptions = {}) {
           const matchedCommand = matchedCommandSummary(
             matchingBashCommandText(pattern, bashAnalysis),
           );
+          // A command that does not parse matches every bash deny rule, so that it fails closed.
+          const unparsedBash = pattern.toolName === "bash" && !isMalformedToolPattern(pattern)
+            ? bashAnalysis?.errors[0]?.message
+            : undefined;
           if (isOwnedInspection) state.checkedActions += 1;
           return block(ctx, {
             timestamp: Date.now(),
             toolName: event.toolName,
-            reason: `Blocked by permissions.deny: ${pattern.raw}${
-              matchedCommand ? `; matched command: ${matchedCommand}` : ""
-            }`,
+            reason: unparsedBash
+              ? `Blocked by permissions.deny: the command could not be parsed as shell (${unparsedBash}), so it cannot be checked against the bash deny rules. It did not match ${pattern.raw}. Fix the syntax and retry.`
+              : `Blocked by permissions.deny: ${pattern.raw}${
+                matchedCommand ? `; matched command: ${matchedCommand}` : ""
+              }`,
             action: summary,
             kind: "permissions.deny",
           }, logCtx);
